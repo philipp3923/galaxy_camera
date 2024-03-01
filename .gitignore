@@ -1,0 +1,6 @@
+data/
+build/
+install/
+log/
+src/camera_perception/CMakeLists.txt
+.pre-commit-config.yaml
