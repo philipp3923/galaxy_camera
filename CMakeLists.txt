@@ -11,6 +11,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(dv_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
@@ -36,12 +37,26 @@ include_directories(/usr/include)
 
 add_executable(${EXECUTABLE_NAME}
         src/main.cpp
+        src/Node.cpp
+        src/Camera.cpp
 )
 
 target_link_libraries(
         ${EXECUTABLE_NAME}
         ${GXIAPI_LIB}
         ${OpenCV_LIBS}
+)
+
+# ros sepcific linking
+ament_target_dependencies(
+        ${EXECUTABLE_NAME}
+        rclcpp
+        std_msgs
+        rmw
+        sensor_msgs
+        cv_bridge
+        dv_msgs
+        OpenCV
 )
 
 install(TARGETS ${EXECUTABLE_NAME} DESTINATION lib/${PROJECT_NAME})
