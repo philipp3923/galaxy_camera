@@ -1,6 +1,10 @@
 #include <string>
 #include <utility>
 #include <iostream>
+#include <optional>
+#include <chrono>
+#include <DxImageProc.h>
+#include <opencv2/imgproc.hpp>
 #include "Camera.hpp"
 #include "../include/GxIAPI.h"
 
@@ -8,6 +12,12 @@
     if (status != GX_STATUS_SUCCESS) \
     { \
          throw CameraException(GetErrorString(status)); \
+    } \
+
+#define DX_VERIFY(status) \
+    if (status != DX_OK) \
+    { \
+        throw CameraException("DxRaw8toRGB24 Failed, Error Code: " + std::to_string(status) + "\n"); \
     } \
 
 
@@ -26,6 +36,14 @@ Camera::Camera() {
 
     status = GXOpenDeviceByIndex(1, &device);
     GX_VERIFY(status);
+
+    status = GXGetInt(device, GX_INT_PAYLOAD_SIZE, &payload_size);
+    GX_VERIFY(status);
+
+    rgb_image_buffer = new unsigned char[payload_size * 3];
+
+    status = GXGetEnum(device, GX_ENUM_PIXEL_COLOR_FILTER, &color_filter);
+    GX_VERIFY(status);
 }
 
 void Camera::set_exposure_manual(double exposure) {
@@ -41,35 +59,35 @@ void Camera::set_exposure_auto(double min_exposure, double max_exposure) {
 }
 
 void Camera::set_roi(int x, int y, int width, int height) {
-    status = GXSetInt(device, GX_INT_OFFSET_X, x);
-    GX_VERIFY(status);
-    status = GXSetInt(device, GX_INT_OFFSET_Y, y);
-    GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_HEIGHT, width);
     GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_WIDTH, height);
     GX_VERIFY(status);
+    status = GXSetInt(device, GX_INT_OFFSET_X, x);
+    GX_VERIFY(status);
+    status = GXSetInt(device, GX_INT_OFFSET_Y, y);
+    GX_VERIFY(status);
 }
 
 void Camera::set_statistical_area_roi(int x, int y, int width, int height) {
-    status = GXSetInt(device, GX_INT_AAROI_OFFSETX, x);
-    GX_VERIFY(status);
-    status = GXSetInt(device, GX_INT_AAROI_OFFSETY, y);
-    GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_AAROI_WIDTH, width);
     GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_AAROI_HEIGHT, height);
     GX_VERIFY(status);
+    status = GXSetInt(device, GX_INT_AAROI_OFFSETX, x);
+    GX_VERIFY(status);
+    status = GXSetInt(device, GX_INT_AAROI_OFFSETY, y);
+    GX_VERIFY(status);
 }
 
 void Camera::set_white_balance_roi(int x, int y, int width, int height) {
-    status = GXSetInt(device, GX_INT_AWBROI_OFFSETX, x);
-    GX_VERIFY(status);
-    status = GXSetInt(device, GX_INT_AWBROI_OFFSETY, y);
-    GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_AWBROI_WIDTH, width);
     GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_AWBROI_HEIGHT, height);
+    GX_VERIFY(status);
+    status = GXSetInt(device, GX_INT_AWBROI_OFFSETX, x);
+    GX_VERIFY(status);
+    status = GXSetInt(device, GX_INT_AWBROI_OFFSETY, y);
     GX_VERIFY(status);
 }
 
@@ -172,6 +190,68 @@ void Camera::set_stream_buffer_mode(StreamBufferMode mode) {
             break;
     }
     GX_VERIFY(status);
+}
+
+std::optional<Capture> Camera::get_image(int64_t timeout) {
+    //int64_t tick_frequency = 125000000;
+
+    status = GXDQBuf(device, &frame_buffer, 1000);
+    // TODO this timestamp is not accurate. Most functions for timestamp acquisition seem to not be implemented in our camera. Still this should be improved in the future
+    const auto sys_time_1 = std::chrono::system_clock::now();
+
+    if (status == GX_STATUS_TIMEOUT) {
+        printf("<Acquisition timed out\n");
+        return {};
+    }
+
+    if (frame_buffer->nStatus != GX_FRAME_STATUS_SUCCESS) {
+        printf("<Abnormal Acquisition: Exception code: %d>\n", frame_buffer->nStatus);
+        status = GXQBuf(device, frame_buffer);
+        GX_VERIFY(status);
+        return {};
+    }
+
+    GX_VERIFY(status);
+
+    Capture cap;
+
+    cap.height = frame_buffer->nHeight;
+    cap.width = frame_buffer->nWidth;
+    cap.frame_id = frame_buffer->nFrameID;
+    cap.timestamp = sys_time_1;
+    cap.image = cv::Mat(cap.height, cap.width, CV_8UC3);
+
+    // TODO this does not work with Raw16 images!
+    status = DxRaw8toRGB24((unsigned char *) frame_buffer->pImgBuf, rgb_image_buffer, frame_buffer->nWidth,
+                           frame_buffer->nHeight, RAW2RGB_NEIGHBOUR,
+                           DX_PIXEL_COLOR_FILTER(color_filter), false);
+    DX_VERIFY(status);
+
+    memcpy(cap.image.data, rgb_image_buffer, frame_buffer->nWidth * frame_buffer->nHeight * 3);
+    cv::cvtColor(cap.image, cap.image, cv::COLOR_RGB2BGR);
+
+    status = GXQBuf(device, frame_buffer);
+    GX_VERIFY(status);
+
+    return cap;
+}
+
+void Camera::start_capturing() {
+    status = GXStreamOn(device);
+    GX_VERIFY(status);
+}
+
+void Camera::stop_capturing() {
+    status = GXStreamOff(device);
+    GX_VERIFY(status);
+}
+
+Camera::~Camera() {
+    status = GXCloseDevice(device);
+    GX_VERIFY(status);
+
+    device = nullptr;
+    GXCloseLib();
 }
 
 const char *GetErrorString(GX_STATUS emErrorStatus) {

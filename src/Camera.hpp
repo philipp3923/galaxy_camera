@@ -2,6 +2,8 @@
 
 #include <exception>
 #include <GxIAPI.h>
+#include <opencv2/core/mat.hpp>
+#include <chrono>
 
 enum TriggerSource {
     CONTINUOUS,
@@ -17,12 +19,27 @@ enum StreamBufferMode {
     NewestOnly
 };
 
+struct Capture {
+    cv::Mat image;
+    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> timestamp;
+    int32_t width;
+    int32_t height;
+    uint64_t frame_id;
+};
+
 class Camera {
 private:
     GX_STATUS status = GX_STATUS_SUCCESS;
     GX_DEV_HANDLE device = nullptr;
+    PGX_FRAME_BUFFER frame_buffer = nullptr;
+    int64_t payload_size = 0;
+    int64_t color_filter = GX_COLOR_FILTER_NONE;
+    unsigned char *rgb_image_buffer = nullptr;
+
 public:
     Camera();
+
+    virtual ~Camera();
 
     /**
      * set the exposure to manual
@@ -110,6 +127,24 @@ public:
      * @param mode
      */
     void set_stream_buffer_mode(StreamBufferMode mode);
+
+    /**
+     * starts capturing images
+     */
+    void start_capturing();
+
+    /**
+     * stops capturing images
+     */
+    void stop_capturing();
+
+    /**
+     * receives an image from the camera within the given timeout.
+     * start_capturing() must be called in advance.
+     * @param timeout
+     * @return captured image
+     */
+    std::optional<Capture> get_image(int64_t timeout);
 };
 
 /**
