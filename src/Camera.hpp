@@ -4,6 +4,8 @@
 #include <GxIAPI.h>
 #include <opencv2/core/mat.hpp>
 #include <chrono>
+#include <rclcpp/logger.hpp>
+#include <rclcpp/clock.hpp>
 
 enum TriggerSource {
     CONTINUOUS,
@@ -21,7 +23,7 @@ enum StreamBufferMode {
 
 struct Capture {
     cv::Mat image;
-    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> timestamp;
+    rclcpp::Time timestamp;
     int32_t width;
     int32_t height;
     uint64_t frame_id;
@@ -35,6 +37,9 @@ private:
     int64_t payload_size = 0;
     int64_t color_filter = GX_COLOR_FILTER_NONE;
     unsigned char *rgb_image_buffer = nullptr;
+    rclcpp::Logger logger;
+    rclcpp::Clock clock;
+
 
 public:
     Camera();
@@ -61,7 +66,7 @@ public:
      * @param width
      * @param height
      */
-    void set_roi(int x, int y, int width, int height);
+    void set_roi(long x, long y, long width, long height);
 
     /**
      * set the region of interest which is used for statistical processing within the camera
@@ -70,7 +75,7 @@ public:
      * @param width
      * @param height
      */
-    void set_statistical_area_roi(int x, int y, int width, int height);
+    void set_statistical_area_roi(long x, long y, long width, long height);
 
     /**
      * set the region of interest for automatic white balance determination
@@ -79,7 +84,7 @@ public:
      * @param width
      * @param height
      */
-    void set_white_balance_roi(int x, int y, int width, int height);
+    void set_white_balance_roi(long x, long y, long width, long height);
 
     /**
      * set the source of the trigger to be either software based or hardware based
@@ -107,7 +112,7 @@ public:
     void set_gamma_manual(double gamma);
 
     /**
-     * deativates the gamma feature
+     * deactivates the gamma feature
      */
     void set_gamma_manual();
 

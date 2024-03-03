@@ -1,0 +1,34 @@
+galaxy_camera:
+  ros__parameters:
+    # topic on which camera images are published
+    image_topic: !!str /perception/camera/image
+
+    # whether to activate automatic white balance
+    enable_white_balance: !!bool true
+    # region of interest for determining white balance (x, y, width, height)
+    white_balance_roi: [ 544, 148, 3024, 1788 ]
+
+    # region of interest for statistical processing (auto_exposure, gain)
+    statistical_area_roi: [ 544, 148, 3024, 1788 ]
+
+    # enable auto exposure
+    enable_auto_exposure: !!bool true
+    # set manual exposure value (microseconds)
+    manual_exposure: !!float 100.0
+    # set auto exposure range (microseconds)
+    auto_exposure: [ 11.0, 1000.0 ]
+
+    #enable auto gain
+    enable_auto_gain: !!bool true
+    # set manual gain value (dB)
+    manual_gain: !!float 0.0
+    # set auto exposure range (dB)
+    auto_gain: [ 0.0, 16.0 ]
+
+    # enable auto gamma
+    enable_auto_gamma: !!bool true
+    # set manual gamma value
+    manual_gamma: !!float 0.0
+
+    # set trigger source (0=CONTINUOUS, 1=SOFTWARE, 2=LINE_O, 3=LINE_2, 4=LINE_3)
+    trigger_source: !!int 0

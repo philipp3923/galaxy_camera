@@ -1,12 +1,11 @@
 #include <string>
 #include <utility>
-#include <iostream>
 #include <optional>
 #include <chrono>
 #include <DxImageProc.h>
 #include <opencv2/imgproc.hpp>
 #include "Camera.hpp"
-#include "../include/GxIAPI.h"
+#include <rclcpp/rclcpp.hpp>
 
 #define GX_VERIFY(status) \
     if (status != GX_STATUS_SUCCESS) \
@@ -20,8 +19,15 @@
         throw CameraException("DxRaw8toRGB24 Failed, Error Code: " + std::to_string(status) + "\n"); \
     } \
 
+#define INFO(...) \
+    RCLCPP_INFO(logger __VA_ARGS__); \
 
-Camera::Camera() {
+
+#define WARN(...) \
+    RCLCPP_WARN(logger, __VA_ARGS__); \
+
+
+Camera::Camera() : logger(rclcpp::get_logger("camera_api")) {
     status = GXInitLib();
     GX_VERIFY(status);
 
@@ -58,7 +64,7 @@ void Camera::set_exposure_auto(double min_exposure, double max_exposure) {
     GX_VERIFY(status);
 }
 
-void Camera::set_roi(int x, int y, int width, int height) {
+void Camera::set_roi(long x, long y, long width, long height) {
     status = GXSetInt(device, GX_INT_HEIGHT, width);
     GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_WIDTH, height);
@@ -69,7 +75,7 @@ void Camera::set_roi(int x, int y, int width, int height) {
     GX_VERIFY(status);
 }
 
-void Camera::set_statistical_area_roi(int x, int y, int width, int height) {
+void Camera::set_statistical_area_roi(long x, long y, long width, long height) {
     status = GXSetInt(device, GX_INT_AAROI_WIDTH, width);
     GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_AAROI_HEIGHT, height);
@@ -80,7 +86,7 @@ void Camera::set_statistical_area_roi(int x, int y, int width, int height) {
     GX_VERIFY(status);
 }
 
-void Camera::set_white_balance_roi(int x, int y, int width, int height) {
+void Camera::set_white_balance_roi(long x, long y, long width, long height) {
     status = GXSetInt(device, GX_INT_AWBROI_WIDTH, width);
     GX_VERIFY(status);
     status = GXSetInt(device, GX_INT_AWBROI_HEIGHT, height);
@@ -94,30 +100,34 @@ void Camera::set_white_balance_roi(int x, int y, int width, int height) {
 void Camera::set_trigger_source(TriggerSource source) {
     switch (source) {
         case CONTINUOUS:
+            status = GXSetEnum(device, GX_ENUM_TRIGGER_MODE, GX_TRIGGER_MODE_OFF);
+            GX_VERIFY(status);
             status = GXSetEnum(device, GX_ENUM_ACQUISITION_MODE, GX_ACQ_MODE_CONTINUOUS);
             GX_VERIFY(status);
             break;
         default:
+            status = GXSetEnum(device, GX_ENUM_TRIGGER_MODE, GX_TRIGGER_MODE_ON);
+            GX_VERIFY(status);
             status = GXSetEnum(device, GX_ENUM_ACQUISITION_MODE, GX_ACQ_MODE_SINGLE_FRAME);
             GX_VERIFY(status);
         case SOFTWARE:
-            status = GXSetEnum(device, GX_ENUM_COUNTER_TRIGGER_SOURCE,
-                               GX_COUNTER_TRIGGER_SOURCE_SOFTWARE);
+            status = GXSetEnum(device, GX_ENUM_TRIGGER_SOURCE,
+                               GX_TRIGGER_SOURCE_SOFTWARE);
             GX_VERIFY(status);
             break;
         case LINE_0:
-            status = GXSetEnum(device, GX_ENUM_COUNTER_TRIGGER_SOURCE,
-                               GX_COUNTER_TRIGGER_SOURCE_LINE0);
+            status = GXSetEnum(device, GX_ENUM_TRIGGER_SOURCE,
+                               GX_TRIGGER_SOURCE_LINE0);
             GX_VERIFY(status);
             break;
         case LINE_2:
-            status = GXSetEnum(device, GX_ENUM_COUNTER_TRIGGER_SOURCE,
-                               GX_COUNTER_TRIGGER_SOURCE_LINE2);
+            status = GXSetEnum(device, GX_ENUM_TRIGGER_SOURCE,
+                               GX_TRIGGER_SOURCE_LINE2);
             GX_VERIFY(status);
             break;
         case LINE_3:
-            status = GXSetEnum(device, GX_ENUM_COUNTER_TRIGGER_SOURCE,
-                               GX_COUNTER_TRIGGER_SOURCE_LINE3);
+            status = GXSetEnum(device, GX_ENUM_TRIGGER_SOURCE,
+                               GX_TRIGGER_SOURCE_LINE3);
             GX_VERIFY(status);
             break;
     }
@@ -197,18 +207,18 @@ std::optional<Capture> Camera::get_image(int64_t timeout) {
 
     status = GXDQBuf(device, &frame_buffer, 1000);
     // TODO this timestamp is not accurate. Most functions for timestamp acquisition seem to not be implemented in our camera. Still this should be improved in the future
-    const auto sys_time_1 = std::chrono::system_clock::now();
+    auto ros2_time = clock.now();
 
     if (status == GX_STATUS_TIMEOUT) {
-        printf("<Acquisition timed out\n");
-        return {};
+        WARN("Acquisition timed out");
+        return std::nullopt;
     }
 
     if (frame_buffer->nStatus != GX_FRAME_STATUS_SUCCESS) {
-        printf("<Abnormal Acquisition: Exception code: %d>\n", frame_buffer->nStatus);
+        WARN("Abnormal Acquisition: Exception code: %d", frame_buffer->nStatus);
         status = GXQBuf(device, frame_buffer);
         GX_VERIFY(status);
-        return {};
+        return std::nullopt;
     }
 
     GX_VERIFY(status);
@@ -218,7 +228,7 @@ std::optional<Capture> Camera::get_image(int64_t timeout) {
     cap.height = frame_buffer->nHeight;
     cap.width = frame_buffer->nWidth;
     cap.frame_id = frame_buffer->nFrameID;
-    cap.timestamp = sys_time_1;
+    cap.timestamp = ros2_time;
     cap.image = cv::Mat(cap.height, cap.width, CV_8UC3);
 
     // TODO this does not work with Raw16 images!
