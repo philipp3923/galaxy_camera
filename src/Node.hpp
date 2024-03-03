@@ -35,7 +35,7 @@ private:
 
     void configure_camera();
 
-    [[noreturn]] void callback();
+    void callback();
 
 public:
     Node();

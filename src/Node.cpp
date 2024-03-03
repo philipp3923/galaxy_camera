@@ -53,7 +53,7 @@ void Node::configure_camera() {
     camera.set_stream_buffer_mode(NewestOnly);
 }
 
-[[noreturn]] void Node::callback() {
+void Node::callback() {
     timer->cancel();
 
     camera.start_capturing();
@@ -73,6 +73,10 @@ void Node::configure_camera() {
         image_msg->header.stamp = capture.timestamp;
 
         image_publisher->publish(*image_msg.get());
+
+        if (!rclcpp::ok()) {
+            break;
+        }
     }
 }
 
